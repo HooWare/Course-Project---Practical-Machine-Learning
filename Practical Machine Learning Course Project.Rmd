@@ -1,0 +1,126 @@
+---
+title: "Practical Machine Learning - Course Project"
+author: "Burak Horata"
+date: "May 13, 2018"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+MODEL FRAMEWORK
+
+Through the prediction model that I will build within this assignment, I will try to have a robust prediction model to estimate the classe variable in the test dataset, which refers to the way in which the barbell lift is performed. Below, I list the 5 different values that can be taken by this variable as per the data set:
+- Class A: exactly according to the specification
+- Class B: throwing the elbows to the front
+- Class C: lifting the dumbbell only halfway
+- Class D: lowering the dumbbell only halfway
+- Class E: throwing the hips to the front
+
+That being said, I summarize below how I will employ the cross validation in the process of building a prediction model and how I will calculate expected out-of-sample error.   
+
+CROSS VALIDATION SCHEME:
+
+For class-validation purpose, I will employ the methodology random subsampling. In other words, I will randomly subsample the training data set into two as subtraining and subtesting sets. Then, I will fit a model based on subtraining data set using different machine learning algorithms and test those models on the subtest set. The final prediction model will be chosen based on the accuracy figures achieved by each algorithm on the substest set. Then, this prediction model will be tested on the test data.
+
+EXPECTED OUT-OF-SAMPLE-TEST ERROR
+
+Given that the outcome variable in this assignment is a factor variable, I will adopt the accuracy (what percentage
+of the predictions on the test data are correct predictions) as the measure of the error. Expected out-of-sample error
+will be calculated for each prediction model based on their accuracy on the subtest data (which is explained above).
+
+On the other hand, I will not be using the set.seed function to achieve reproducability of my code as my code is not expected to be run by the reviewers according to the instructions of the assignment.
+
+Having provided a high-level framework of the methodology that I will follow in this assignment, I will start with the first phase of this assignment which is data-cleaning. In this initial phase, I will aim to ensure that the variables that do not have any effect or have a trivial effect on the outcome are eliminated from the data set. I will do this by eliminating the variables that have a variance close to zero and eliminating the variables with significant number of NAs.
+
+That being said though, before jumping into data cleaning I will install the packages that I will use in this assignment.
+
+
+```{r R PACKAGES}
+library(caret)
+```
+
+DATA CLEANING
+
+I load the testing and training data from the .csv files below.
+```{r}
+training = read.csv("C:/Users/burak/Desktop/Util/BH things/My courses/02_Practical machine learning/pml-training.csv")
+testing = read.csv("C:/Users/burak/Desktop/Util/BH things/My courses/02_Practical machine learning/pml-testing.csv")
+```
+
+I identify below the indices of the variables that have near-zero variance and then eliminate them.
+```{r}
+predictorsWithNZV <- nearZeroVar(training)
+training<-training[,-predictorsWithNZV]
+dim(training)
+
+```
+
+Following the removal of variables with near zero variance, I identify below the indices of the variables that have a lot of NAs and then eliminate them. I set the threshold as 50%, which implies that if NAs make up more than 50% of the instances of a variable, then it will be eliminated. 
+```{r}
+variablesWithManyNAs<-c()
+for(i in 1:dim(training)[2]){
+  if(sum(is.na(training[,i])) >= 0.5*dim(training)[1]){
+    variablesWithManyNAs<-c(variablesWithManyNAs,i)
+  }
+}
+
+training <- training[,-variablesWithManyNAs]
+dim(training)
+```
+
+After the removal of those variables, when I look at the first 6 elements of each remaining variable in the dataset through the head function, I also notice that the first variable is an index variable that shall not be taken into account when building the prediction model. For this reason, I eliminate it, too.
+```{r}
+training <- training[,-1]
+dim(training)
+```
+Now, I apply the same eliminations to the test set as well.
+
+```{r}
+testing<-testing[names(training[,-58])]
+```
+Please note that, I do not include the 58th column in the above code (which is the classe variable) as I notice that it is already removed in testing data. 
+
+SUBSAMPLING THE TRAINING DATA
+
+Now that we have taken the necessary steps to ensure that we have a clean data set, I will randomly divide the training data into two as subtest and subtraining data as discussed earlier. I will use a ratio of 75% for training data and 25% for testing data for this purpose.
+```{r}
+subTrain<-createDataPartition(y=training$classe,
+                                     p=0.75, list=FALSE)
+subTraining<-training[subTrain,]
+subTesting<-training[-subTrain,]
+```
+
+Having subsampled the training data, the next phase of the assignment is to build a variety of prediction models and pick the best performing one as our final prediction model.
+
+BUILDING A PREDICTION MODEL
+
+Within this phase, I will fit a model to our subtraining data set through the algorithms; decision tree ("rpart") and boosting (through linear discriminant analysis; "lda").
+Then, I will see how they perform when they are employed to predict our subtraining data based on the resulting accuracy levels. Following that, I will choose the final model as the one that leads to the highest accuracy.
+
+Below, I fit three models to the subtraining data using the above-mentioned methodologies. 
+```{r}
+modTree<- train(classe~.,data=subTraining,method="rpart")
+modBoost<- train(classe~.,data=subTraining,method="lda")
+```
+
+Then, I perform the predictions and see the resulting accuracy level through the confusion matrix function.
+```{r}
+predTree<-predict(modTree,subTesting)
+confusionMatrix(predTree,subTesting$classe)
+```
+Decision tree model leads to an accuracy level of around 65%
+```{r}
+predBoost<-predict(modBoost,subTesting)
+confusionMatrix(predBoost,subTesting$classe)
+```
+Boosting model leads to an accuracy level of around 85%.
+
+Consequently, I choose the boosting model, which performed best on the subtest data in terms of  accuracy, as the final model. As a result of that, the expected out-of-sample error is around 85% for the final model. Within the context of our testing data, it would imply that the final model is expected to produce a wrong prediction for 3 instances of the test data (20 - 20*0.85 = 3).
+
+Below, I predict the classe variable for the test data, using the boosting model.
+```{r}
+predict(modBoost,testing)
+```
+
